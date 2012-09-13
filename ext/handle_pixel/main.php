@@ -73,7 +73,7 @@ class PixelFileHandler extends DataHandlerExtension {
 	public function onImageAdminBlockBuilding(ImageAdminBlockBuildingEvent $event) {
 		$event->add_part("
 			<form>
-				<select id='zoomer'>
+				<select class='shm-zoomer'>
 					<option value='full'>Full Size</option>
 					<option value='width'>Fit Width</option>
 					<option value='height'>Fit Height</option>
@@ -115,6 +115,10 @@ class PixelFileHandler extends DataHandlerExtension {
 		exec($cmd, $output, $ret);
 
 		log_debug('handle_pixel', "Generating thumnail with command `$cmd`, returns $ret");
+
+		if($config->get_bool("thumb_optim", false)) {
+			exec("jpegoptim $outname", $output, $ret);
+		}
 
 		return true;
 	}

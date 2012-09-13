@@ -122,9 +122,15 @@ class SearchTermParseException extends SCoreException {
 
 class PostListBuildingEvent extends Event {
 	var $search_terms = null;
+	var $parts = array();
 
 	public function __construct($search) {
 		$this->search_terms = $search;
+	}
+
+	public function add_control(/*string*/ $html, /*int*/ $position=50) {
+		while(isset($this->parts[$position])) $position++;
+		$this->parts[$position] = $html;
 	}
 }
 
@@ -158,7 +164,16 @@ class Index extends Extension {
 			$page_size = $event->get_page_size();
 			try {
 				$total_pages = Image::count_pages($search_terms);
-				$images = Image::find_images(($page_number-1)*$page_size, $page_size, $search_terms);
+				if(SPEED_HAX && count($search_terms) == 0 && ($page_number < 10)) { // extra caching for the first few post/list pages
+					$images = $database->cache->get("post-list-$page_number");
+					if(!$images) {
+						$images = Image::find_images(($page_number-1)*$page_size, $page_size, $search_terms);
+						$database->cache->set("post-list-$page_number", $images, 600);
+					}
+				}
+				else {
+					$images = Image::find_images(($page_number-1)*$page_size, $page_size, $search_terms);
+				}
 			}
 			catch(SearchTermParseException $stpe) {
 				// FIXME: display the error somewhere
@@ -175,10 +190,14 @@ class Index extends Extension {
 				$page->set_redirect(make_link('post/view/'.$images[0]->id));
 			}
 			else {
-				send_event(new PostListBuildingEvent($search_terms));
+				$plbe = new PostListBuildingEvent($search_terms);
+				send_event($plbe);
 
 				$this->theme->set_page($page_number, $total_pages, $search_terms);
 				$this->theme->display_page($page, $images);
+				if(count($plbe->parts) > 0) {
+					$this->theme->display_admin_block($plbe->parts);
+				}
 			}
 		}
 	}
@@ -192,6 +211,24 @@ class Index extends Extension {
 		$sb->add_label(" images on the post list");
 
 		$event->panel->add_block($sb);
+	}
+
+	public function onImageAddition(ImageAdditionEvent $event) {
+		global $database;
+		if(SPEED_HAX) {
+			for($i=1; $i<10; $i++) {
+				$database->cache->delete("post-list-$i");
+			}
+		}
+	}
+
+	public function onImageDeletion(ImageDeletionEvent $event) {
+		global $database;
+		if(SPEED_HAX) {
+			for($i=1; $i<10; $i++) {
+				$database->cache->delete("post-list-$i");
+			}
+		}
 	}
 
 	public function onSearchTermParse(SearchTermParseEvent $event) {

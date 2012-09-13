@@ -20,12 +20,10 @@ class ImageAdditionEvent extends Event {
 	 * this new image.
 	 *
 	 * @sa TagSetEvent
-	 * @param $user	The user adding the image
 	 * @param $image	The new image to add.
 	 */
-	public function ImageAdditionEvent(User $user, Image $image) {
+	public function ImageAdditionEvent(Image $image) {
 		$this->image = $image;
-		$this->user = $user;
 	}
 }
 
@@ -72,7 +70,7 @@ class ImageReplaceEvent extends Event {
 	 * @param $image
 	 *   The image object of the new image to use
 	 */
-	public function ImageReplaceEvent($id, Image $image) {
+	public function ImageReplaceEvent(/*int*/ $id, Image $image) {
 		$this->id = $id;
 		$this->image = $image;
 	}
@@ -81,7 +79,7 @@ class ImageReplaceEvent extends Event {
 class ImageReplaceException extends SCoreException {
 	var $error;
 
-	public function __construct($error) {
+	public function __construct(/*string*/ $error) {
 		$this->error = $error;
 	}
 }
@@ -296,7 +294,7 @@ class ImageIO extends Extension {
 				$merged = array_merge($image->get_tag_array(), $existing->get_tag_array());
 				send_event(new TagSetEvent($existing, $merged));
 				if(isset($_GET['rating']) && isset($_GET['update']) && class_exists("Ratings")){
-					send_event(new RatingSetEvent($existing, $user, $_GET['rating']));
+					send_event(new RatingSetEvent($existing, $_GET['rating']));
 				}
 				if(isset($_GET['source']) && isset($_GET['update'])){
 					send_event(new SourceSetEvent($existing, $_GET['source']));
@@ -305,7 +303,7 @@ class ImageIO extends Extension {
 			}
 			else {
 				$error = "Image <a href='".make_link("post/view/{$existing->id}")."'>{$existing->id}</a> ".
-						"already has hash {$image->hash}:<p>".Themelet::build_thumb_html($existing);
+						"already has hash {$image->hash}:<p>".$this->theme->build_thumb_html($existing);
 				throw new ImageAdditionException($error);
 			}
 		}

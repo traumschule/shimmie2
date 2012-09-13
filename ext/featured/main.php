@@ -33,6 +33,7 @@ class Featured extends Extension {
 					$id = int_escape($_POST['image_id']);
 					if($id > 0) {
 						$config->set_int("featured_id", $id);
+						log_info("featured", "Featured image set to $id", "Featured image set");
 						$page->set_mode("redirect");
 						$page->set_redirect(make_link("post/view/$id"));
 					}
@@ -59,10 +60,13 @@ class Featured extends Extension {
 		global $config, $database, $page, $user;
 		$fid = $config->get_int("featured_id");
 		if($fid > 0) {
-			$image = $database->cache->get("featured_image_object");
-			if(empty($image)) {
+			$image = $database->cache->get("featured_image_object-$fid");
+			if($image === false) {
 				$image = Image::by_id($fid);
-				$database->cache->set("featured_image_object", $image, 60);
+				if($image) { // make sure the object is fully populated before saving
+					$image->get_tag_array();
+				}
+				$database->cache->set("featured_image_object-$fid", $image, 600);
 			}
 			if(!is_null($image)) {
 				if(class_exists("Ratings")) {

@@ -62,7 +62,6 @@ if(COVERAGE) {
 }
 _version_check();
 _sanitise_environment();
-_start_cache();
 
 try {
 	// load base files
@@ -76,15 +75,12 @@ try {
 	ctx_log_start("Connecting to DB");
 	// connect to the database
 	$database = new Database();
-	$database->db->beginTransaction();
 	$config = new DatabaseConfig($database);
 	ctx_log_endok();
 
 	// load the theme parts
 	ctx_log_start("Loading themelets");
-	$_theme = $config->get_string("theme", "default");
-	if(!file_exists("themes/$_theme")) $_theme = "default";
-	foreach(_get_themelet_files($_theme) as $themelet) {
+	foreach(_get_themelet_files(get_theme()) as $themelet) {
 		require_once $themelet;
 	}
 	ctx_log_endok();
@@ -95,17 +91,21 @@ try {
 	$page = class_exists("CustomPage") ? new CustomPage() : new Page();
 	$user = _get_user();
 	send_event(new InitExtEvent());
-	send_event(_get_page_request());
-	$page->display();
+	if(!is_cli()) { // web request
+		send_event(new PageRequestEvent(@$_GET["q"]));
+		$page->display();
+	}
+	else { // command line request
+		send_event(new CommandEvent($argv));
+	}
 
-	$database->db->commit();
 	// saving cache data and profiling data to disk can happen later
 	if(function_exists("fastcgi_finish_request")) fastcgi_finish_request();
-	_end_cache();
+	$database->commit();
 	ctx_log_endok();
 }
 catch(Exception $e) {
-	if($database && $database->db) $database->db->rollback();
+	if($database) $database->rollback();
 	_fatal_error($e);
 	ctx_log_ender();
 }

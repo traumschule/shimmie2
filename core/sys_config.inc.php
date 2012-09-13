@@ -20,13 +20,12 @@
  */
 function _d($name, $value) {if(!defined($name)) define($name, $value);}
 _d("DATABASE_DSN", null);    // string   PDO database connection details
+_d("DATABASE_KA", true);     // string   Keep database connection alive
 _d("CACHE_DSN", null);       // string   cache connection details
 _d("DEBUG", false);          // boolean  print various debugging details
 _d("DEBUG_SQL", false);      // boolean  dump SQL queries to data/sql.log
 _d("COVERAGE", false);       // boolean  activate xdebug coverage monitor
 _d("CONTEXT", null);         // string   file to log performance data into
-_d("CACHE_MEMCACHE", false); // boolean  store complete rendered pages in memcache
-_d("CACHE_DIR", false);      // boolean  store complete rendered pages on disk
 _d("CACHE_HTTP", false);     // boolean  output explicit HTTP caching headers
 _d("COOKIE_PREFIX", 'shm');  // string   if you run multiple galleries with non-shared logins, give them different prefixes
 _d("SPEED_HAX", false);      // boolean  do some questionable things in the name of performance

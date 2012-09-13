@@ -1,36 +1,24 @@
 <?php ob_start(); ?>
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml">
+<!DOCTYPE html>
+<html>
 <!--
  - install.php (c) Shish et all. 2007-2012
  -
  - Initialise the database, check that folder
- - permissions are set properly, set an admin
- - account.
+ - permissions are set properly.
  -
  - This file should be independant of the database
  - and other such things that aren't ready yet
 -->
 	<head>
 		<title>Shimmie Installation</title>
-		<link rel="shortcut icon" href="/favicon.ico" />
+		<link rel="shortcut icon" href="favicon.ico" />
 		<link rel='stylesheet' href='lib/shimmie.css' type='text/css'>
-		<style type="text/css">
-			BODY {background: #EEE;font-family: "Arial", sans-serif;font-size: 14px;}
-			H1, H3 {border: 1px solid black;background: #DDD;text-align: center;}
-			H1 {margin-top: 0px;margin-bottom: 0px;padding: 2px;}
-			H3 {margin-top: 32px;padding: 1px;}
-			FORM {margin: 0px;}
-			A {text-decoration: none;}
-			A:hover {text-decoration: underline;}
-			#block {width: 512px; margin: auto; margin-top: 64px;}
-			#iblock {width: 512px; margin: auto; margin-top: 16px;}
-			TD INPUT {width: 350px;}
-		</style>
+		<script src="lib/jquery-1.7.1.min.js"></script>
 	</head>
 	<body>
 <?php if(false) { ?>
-		<div id="block">
+		<div id="installer">
 			<h1>Install Error</h1>
 			<p>Shimmie needs to be run via a web server with PHP support -- you
 			appear to be either opening the file from your hard disk, or your
@@ -60,83 +48,7 @@ require_once __SHIMMIE_ROOT__."core/util.inc.php";
 require_once __SHIMMIE_ROOT__."core/exceptions.class.php";
 require_once __SHIMMIE_ROOT__."core/database.class.php";
 
-
-// repair console {{{
-/*
- * This file lets anyone destroy the database -- disable it
- * as soon as the admin is done installing for the first time
- */
-if(is_readable("data/config/shimmie.conf.php")) {
-	session_start();
-	echo '<div id="iblock">';
-	echo '<h1>Shimmie Repair Console</h1>';
-
-	// Load the config
-	require_once __SHIMMIE_ROOT__."core/sys_config.inc.php";
-
-	if(
-		(array_key_exists('dsn', $_SESSION) && $_SESSION['dsn'] === DATABASE_DSN) ||
-		(array_key_exists('dsn', $_POST)    && $_POST['dsn']    === DATABASE_DSN)
-	) {
-		if (array_key_exists('dsn', $_POST) && !empty($_POST['dsn'])) {
-		    $_SESSION['dsn'] = $_POST['dsn'];
-		}
-
-		if(empty($_GET["action"])) {
-			echo "
-				<h3>Basic Checks</h3>
-				If these checks fail, something is broken; if they all pass, 
-				something <i>might</i> be broken, just not checked for...
-			";
-			eok("Images writable", is_writable("images"));
-			eok("Thumbs writable", is_writable("thumbs"));
-			eok("Data writable", is_writable("data"));
-
-			/*
-			echo "<h3>New Database DSN</h3>";
-			echo "
-				<form action='install.php?action=newdsn' method='POST'>
-					<center>
-						<table>
-							<tr><td>Database:</td><td><input type='text' name='new_dsn' size='40'></td></tr>
-							<tr><td colspan='2'><center><input type='submit' value='Go!'></center></td></tr>
-						</table>
-					</center>
-				</form>
-			";
-			*/
-
-			echo "
-				<h3>Log Out</h3>
-				<form action='install.php?action=logout' method='POST'>
-					<input type='submit' value='Leave'>
-				</form>
-			";
-		}
-		else if($_GET["action"] == "logout") {
-			session_destroy();
-			echo "<h3>Logged Out</h3><p>You have been logged out.</p><a href='index.php'>Main Shimmie Page</a>";
-		}
-	}
-	else {
-		echo "
-			<h3>Login</h3>
-			<p>Enter the database DSN exactly as in shimmie.conf.php (ie, as originally installed) to access advanced recovery tools:</p>
-
-			<form action='install.php' method='POST'>
-				<center>
-					<table class='form'>
-						<tr><th>Database:</th><td><input type='text' name='dsn' size='40'></td></tr>
-						<tr><td colspan='2'><center><input type='submit' value='Go!'></center></td></tr>
-					</table>
-				</center>
-			</form>
-		";
-	}
-	echo "\t\t</div>";
-	exit;
-}
-// }}}
+if(is_readable("data/config/shimmie.conf.php")) die("Already installed");
 
 do_install();
 
@@ -188,64 +100,65 @@ function eok($name, $value) {
 }
 // }}}
 function do_install() { // {{{
-	if(isset($_POST['database_type']) && isset($_POST['database_host']) && isset($_POST['database_user']) && isset($_POST['database_name'])) {
-		$database_dsn = "{$_POST['database_type']}:user={$_POST['database_user']};password={$_POST['database_password']};host={$_POST['database_host']};dbname={$_POST['database_name']}";
-		define('DATABASE_DSN', $database_dsn);
+	if(file_exists("data/config/auto_install.conf.php")) {
+		require_once "data/config/auto_install.conf.php";
 		install_process();
 	}
-	else if(file_exists("auto_install.conf")) {
-		define('DATABASE_DSN', trim(file_get_contents("auto_install.conf")));
+	else if(@$_POST["database_type"] == "sqlite" && isset($_POST["database_name"])) {
+		define('DATABASE_DSN', "sqlite:{$_POST["database_name"]}");
 		install_process();
-		unlink("auto_install.conf");
+	}
+	else if(isset($_POST['database_type']) && isset($_POST['database_host']) && isset($_POST['database_user']) && isset($_POST['database_name'])) {
+		define('DATABASE_DSN', "{$_POST['database_type']}:user={$_POST['database_user']};password={$_POST['database_password']};host={$_POST['database_host']};dbname={$_POST['database_name']}");
+		install_process();
 	}
 	else {
-		begin();
+		ask_questions();
 	}
 } // }}}
-function begin() { // {{{
-	$err = "";
-	$thumberr = "";
-	$dberr = "";
+function ask_questions() { // {{{
+	$warnings = array();
+	$errors = array();
 
 	if(check_gd_version() == 0 && check_im_version() == 0) {
-		$thumberr = "
-			<p>PHP's GD extension seems to be missing, 
-			and imagemagick's \"convert\" command cannot be found - 
-			no thumbnailing engines are available.
+		$errors[] = "
+			No thumbnailers cound be found - install the imagemagick
+			tools (or the PHP-GD library, of imagemagick is unavailable).
+		";
+	}
+	else if(check_im_version() == 0) {
+		$warnings[] = "
+			The 'convert' command (from the imagemagick package)
+			could not be found - PHP-GD can be used instead, but
+			the size of thumbnails will be limited.
 		";
 	}
 
-	if(!function_exists("mysql_connect")) {
-		$dberr = "
-			<p>PHP's MySQL extension seems to be missing; you may
-			be able to use an unofficial alternative, checking 
-			for libraries...
+	$drivers = PDO::getAvailableDrivers();
+	if(
+		!in_array("mysql", $drivers) &&
+		!in_array("pgsql", $drivers) &&
+		!in_array("sqlite", $drivers)
+	) {
+		$errors[] = "
+			No database connection library could be found; shimmie needs
+			PDO with either Postgres, MySQL, or SQLite drivers
 		";
-		if(!function_exists("pg_connect")) {
-			$dberr .= "<br>PgSQL is missing";
-		}
-		else {
-			$dberr .= "<br>PgSQL is available";
-		}
-		if(!function_exists("sqlite_open")) {
-			$dberr .= "<br>SQLite is missing";
-		}
-		else {
-			$dberr .= "<br>SQLite is available";
-		}
 	}
 
-	if($thumberr || $dberr) {
-		$err = "<h3>Error</h3>";
-	}
+	$db_m = in_array("mysql", $drivers)  ? '<option value="mysql">MySQL</option>' : "";
+	$db_p = in_array("pgsql", $drivers)  ? '<option value="pgsql">PostgreSQL</option>' : "";
+	$db_s = in_array("sqlite", $drivers) ? '<option value="sqlite">SQLite</option>' : "";
+
+	$warn_msg = $warnings ? "<h3>Warnings</h3>".implode("\n<br>", $warnings) : "";
+	$err_msg = $errors ? "<h3>Errors</h3>".implode("\n<br>", $errors) : "";
 
 	print <<<EOD
-		<div id="iblock">
+		<div id="installer">
 			<h1>Shimmie Installer</h1>
 
-			$err
-			$thumberr
-			$dberr
+			$warn_msg
+			$err_msg
 
 			<h3>Database Install</h3>
 			<form action="install.php" method="POST">
@@ -253,37 +166,53 @@ function begin() { // {{{
 					<table class='form'>
 						<tr>
 							<th>Type:</th>
-							<td><select name="database_type">
-								<option value="mysql" selected>MySQL</option>
-								<option value="pgsql">PostgreSQL</option>
-								<option value="sqlite">SQLite</option>
-							</td>
+							<td><select name="database_type" id="database_type" onchange="update_qs();">
+								$db_m
+								$db_p
+								$db_s
+							</select></td>
 						</tr>
-						<tr>
+						<tr class="dbconf mysql pgsql">
 							<th>Host:</th>
 							<td><input type="text" name="database_host" size="40" value="localhost"></td>
 						</tr>
-						<tr>
+						<tr class="dbconf mysql pgsql">
 							<th>Username:</th>
 							<td><input type="text" name="database_user" size="40"></td>
 						</tr>
-						<tr>
+						<tr class="dbconf mysql pgsql">
 							<th>Password:</th>
 							<td><input type="password" name="database_password" size="40"></td>
 						</tr>
-						<tr>
-							<th>DB Name:</th>
+						<tr class="dbconf mysql pgsql sqlite">
+							<th>DB&nbsp;Name:</th>
 							<td><input type="text" name="database_name" size="40" value="shimmie"></td>
 						</tr>
-						<tr><td colspan="2"><center><input type="submit" value="Go!"></center></td></tr>
+						<tr><td colspan="2"><input type="submit" value="Go!"></td></tr>
 					</table>
 				</center>
+				<script>
+				$(function() {
+					update_qs();
+				});
+				function update_qs() {
+					$(".dbconf").hide();
+					var seldb = $("#database_type").val();
+					$("."+seldb).show();
+				}
+				</script>
 			</form>
 
 			<h3>Help</h3>
 					
-			<p>Please make sure the database you have chosen exists and is empty.<br>
-			The username provided must have access to create tables within the database.</p>
+			<p class="dbconf mysql pgsql">
+				Please make sure the database you have chosen exists and is empty.<br>
+				The username provided must have access to create tables within the database.
+			</p>
+			<p class="dbconf sqlite">
+				For SQLite the database name will be a filename on disk, relative to
+				where shimmie was installed.
+			</p>
 			
 		</div>
 EOD;
@@ -323,7 +252,8 @@ function create_tables() { // {{{
 			pass CHAR(32),
 			joindate SCORE_DATETIME NOT NULL DEFAULT SCORE_NOW,
 			class VARCHAR(32) NOT NULL DEFAULT 'user',
-			email VARCHAR(128)
+			email VARCHAR(128),
+			INDEX(name)
 		");
 		$db->create_table("images", "
 			id SCORE_AIPK,
@@ -341,12 +271,14 @@ function create_tables() { // {{{
 			INDEX(owner_id),
 			INDEX(width),
 			INDEX(height),
+			INDEX(hash),
 			FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE RESTRICT
 		");
 		$db->create_table("tags", "
 			id SCORE_AIPK,
 			tag VARCHAR(64) UNIQUE NOT NULL,
-			count INTEGER NOT NULL DEFAULT 0
+			count INTEGER NOT NULL DEFAULT 0,
+			INDEX(tag)
 		");
 		$db->create_table("image_tags", "
 			image_id INTEGER NOT NULL,
@@ -358,9 +290,9 @@ function create_tables() { // {{{
 			FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
 		");
 		$db->execute("INSERT INTO config(name, value) VALUES('db_version', 11)");
+		$db->commit();
 	}
-	catch (PDOException $e)
-	{
+	catch(PDOException $e) {
 		// FIXME: Make the error message user friendly
 		exit($e->getMessage());
 	}
@@ -375,9 +307,9 @@ function insert_defaults() { // {{{
 		if(check_im_version() > 0) {
 			$db->execute("INSERT INTO config(name, value) VALUES(:name, :value)", Array("name" => 'thumb_engine', "value" => 'convert'));
 		}
+		$db->commit();
 	}
-	catch (PDOException $e)
-	{
+	catch(PDOException $e) {
 		// FIXME: Make the error message user friendly
 		exit($e->getMessage());
 	}

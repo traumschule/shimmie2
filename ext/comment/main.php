@@ -91,7 +91,7 @@ class CommentList extends Extension {
 			// the whole history
 			if($config->get_int("ext_comments_version") < 1) {
 				$database->create_table("comments", "
-					id {$database->engine->auto_increment},
+					id SCORE_AIPK,
 					image_id INTEGER NOT NULL,
 					owner_id INTEGER NOT NULL,
 					owner_ip CHAR(16) NOT NULL,
@@ -119,7 +119,7 @@ class CommentList extends Extension {
 	}
 
 	public function onPageRequest(PageRequestEvent $event) {
-		global $page, $user;
+		global $page, $user, $database;
 		if($event->page_matches("comment")) {
 			if($event->get_arg(0) === "add") {
 				if(isset($_POST['image_id']) && isset($_POST['comment'])) {
@@ -140,6 +140,7 @@ class CommentList extends Extension {
 					// FIXME: post, not args
 					if($event->count_args() === 3) {
 						send_event(new CommentDeletionEvent($event->get_arg(1)));
+						flash_message("Deleted comment");
 						$page->set_mode("redirect");
 						if(!empty($_SERVER['HTTP_REFERER'])) {
 							$page->set_redirect($_SERVER['HTTP_REFERER']);
@@ -153,11 +154,34 @@ class CommentList extends Extension {
 					$this->theme->display_permission_denied();
 				}
 			}
+			else if($event->get_arg(0) === "bulk_delete") {
+				if($user->can("delete_comment") && !empty($_POST["ip"])) {
+					$ip = $_POST['ip'];
+
+					$cids = $database->get_col("SELECT id FROM comments WHERE owner_ip=:ip", array("ip"=>$ip));
+					$num = count($cids);
+					log_warning("comment", "Deleting $num comments from $ip");
+					foreach($cids as $cid) {
+						send_event(new CommentDeletionEvent($cid));
+					}
+					flash_message("Deleted $num comments");
+
+					$page->set_mode("redirect");
+					$page->set_redirect(make_link("admin"));
+				}
+				else {
+					$this->theme->display_permission_denied();
+				}
+			}
 			else if($event->get_arg(0) === "list") {
 				$page_num = int_escape($event->get_arg(1));
 				$this->build_page($page_num);
 			}
 		}
+	}
+
+	public function onAdminBuilding(AdminBuildingEvent $event) {
+		$this->theme->display_admin_block();
 	}
 
 	public function onPostListBuilding(PostListBuildingEvent $event) {
@@ -366,12 +390,12 @@ class CommentList extends Extension {
 		global $database;
 
 		// sqlite fails at intervals
-		if($database->engine->name === "sqlite") return false;
+		if($database->get_driver_name() === "sqlite") return false;
 
 		$window = int_escape($config->get_int('comment_window'));
 		$max = int_escape($config->get_int('comment_limit'));
 
-		if($database->engine->name == "mysql") $window_sql = "interval $window minute";
+		if($database->get_driver_name() == "mysql") $window_sql = "interval $window minute";
 		else $window_sql = "interval '$window minute'";
 
 		// window doesn't work as an SQL param because it's inside quotes >_<

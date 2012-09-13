@@ -61,12 +61,12 @@ class MySQL extends DBEngine {
 	var $name = "mysql";
 
 	public function init($db) {
-		$db->query("SET NAMES utf8;");
+		$db->exec("SET NAMES utf8;");
 	}
 
 	public function scoreql_to_sql($data) {
 		$data = str_replace("SCORE_AIPK", "INTEGER PRIMARY KEY auto_increment", $data);
-		$data = str_replace("SCORE_INET", "CHAR(45)", $data);
+		$data = str_replace("SCORE_INET", "VARCHAR(45)", $data);
 		$data = str_replace("SCORE_BOOL_Y", "'Y'", $data);
 		$data = str_replace("SCORE_BOOL_N", "'N'", $data);
 		$data = str_replace("SCORE_BOOL", "ENUM('Y', 'N')", $data);
@@ -87,7 +87,7 @@ class PostgreSQL extends DBEngine {
 	var $name = "pgsql";
 
 	public function init($db) {
-		$db->query("SET application_name TO 'shimmie [{$_SERVER['REMOTE_ADDR']}]';");
+		$db->exec("SET application_name TO 'shimmie [{$_SERVER['REMOTE_ADDR']}]';");
 	}
 
 	public function scoreql_to_sql($data) {
@@ -97,7 +97,7 @@ class PostgreSQL extends DBEngine {
 		$data = str_replace("SCORE_BOOL_N", "'f'", $data);
 		$data = str_replace("SCORE_BOOL", "BOOL", $data);
 		$data = str_replace("SCORE_DATETIME", "TIMESTAMP", $data);
-		$data = str_replace("SCORE_NOW", "current_time", $data);
+		$data = str_replace("SCORE_NOW", "current_timestamp", $data);
 		$data = str_replace("SCORE_STRNORM", "lower", $data);
 		$data = str_replace("SCORE_ILIKE", "ILIKE", $data);
 		return $data;
@@ -127,18 +127,18 @@ class SQLite extends DBEngine {
 
 	public function init($db) {
 		ini_set('sqlite.assoc_case', 0);
-		$db->execute("PRAGMA foreign_keys = ON;");
-		@sqlite_create_function($db->_connectionID, 'UNIX_TIMESTAMP', '_unix_timestamp', 1);
-		@sqlite_create_function($db->_connectionID, 'now', '_now', 0);
-		@sqlite_create_function($db->_connectionID, 'floor', '_floor', 1);
-		@sqlite_create_function($db->_connectionID, 'log', '_log');
-		@sqlite_create_function($db->_connectionID, 'isnull', '_isnull', 1);
-		@sqlite_create_function($db->_connectionID, 'md5', '_md5', 1);
-		@sqlite_create_function($db->_connectionID, 'concat', '_concat', 2);
-		@sqlite_create_function($db->_connectionID, 'lower', '_lower', 1);
+		$db->exec("PRAGMA foreign_keys = ON;");
+		$db->sqliteCreateFunction('UNIX_TIMESTAMP', '_unix_timestamp', 1);
+		$db->sqliteCreateFunction('now', '_now', 0);
+		$db->sqliteCreateFunction('floor', '_floor', 1);
+		$db->sqliteCreateFunction('log', '_log');
+		$db->sqliteCreateFunction('isnull', '_isnull', 1);
+		$db->sqliteCreateFunction('md5', '_md5', 1);
+		$db->sqliteCreateFunction('concat', '_concat', 2);
+		$db->sqliteCreateFunction('lower', '_lower', 1);
 	}
 
-	public function create_table_sql($name, $data) {
+	public function scoreql_to_sql($data) {
 		$data = str_replace("SCORE_AIPK", "INTEGER PRIMARY KEY", $data);
 		$data = str_replace("SCORE_INET", "VARCHAR(45)", $data);
 		$data = str_replace("SCORE_BOOL_Y", "'Y'", $data);
@@ -147,20 +147,24 @@ class SQLite extends DBEngine {
 		$data = str_replace("SCORE_NOW", "\"1970-01-01\"", $data);
 		$data = str_replace("SCORE_STRNORM", "", $data);
 		$data = str_replace("SCORE_ILIKE", "LIKE", $data);
+	}
+
+	public function create_table_sql($name, $data) {
+		$data = $this->scoreql_to_sql($data);
 		$cols = array();
 		$extras = "";
 		foreach(explode(",", $data) as $bit) {
 			$matches = array();
 			if(preg_match("/INDEX\s*\((.*)\)/", $bit, $matches)) {
 				$col = $matches[1];
-				$extras .= 'CREATE INDEX '.$name.'_'.$col.' on '.$name($col).';';
+				$extras .= "CREATE INDEX {$name}_{$col} on {$name}({$col});";
 			}
 			else {
 				$cols[] = $bit;
 			}
 		}
 		$cols_redone = implode(", ", $cols);
-		return 'CREATE TABLE '.$name.' ('.$cols_redone.'); '.$extras;
+		return "CREATE TABLE $name ($cols_redone); $extras";
 	}
 }
 // }}}
@@ -195,7 +199,7 @@ class MemcacheCache implements CacheEngine {
 	public function get($key) {
 		assert(!is_null($key));
 		$val = $this->memcache->get($key);
-		if($val) {
+		if($val !== false) {
 			$this->hits++;
 			return $val;
 		}
@@ -259,23 +263,43 @@ class Database {
 	/**
 	 * The PDO database connection object, for anyone who wants direct access
 	 */
-	var $db;
+	private $db = null;
 
 	/**
 	 * Meta info about the database engine
 	 */
-	var $engine = null;
+	private $engine = null;
 
 	/**
 	 * The currently active cache engine
 	 */
-	var $cache = null;
+	public $cache = null;
 
 	/**
-	 * Create a new database object using connection info
-	 * stored in the config file
+	 * For now, only connect to the cache, as we will pretty much certainly
+	 * need it. There are some pages where all the data is in cache, so the
+	 * DB connection is on-demand.
 	 */
 	public function Database() {
+		$this->connect_cache();
+	}
+
+	private function connect_cache() {
+		$matches = array();
+		if(defined("CACHE_DSN") && CACHE_DSN && preg_match("#(memcache|apc)://(.*)#", CACHE_DSN, $matches)) {
+			if($matches[1] == "memcache") {
+				$this->cache = new MemcacheCache($matches[2]);
+			}
+			else if($matches[1] == "apc") {
+				$this->cache = new APCCache($matches[2]);
+			}
+		}
+		else {
+			$this->cache = new NoCache();
+		}
+	}
+
+	private function connect_db() {
 		# FIXME: detect ADODB URI, automatically translate PDO DSN
 
 		/*
@@ -289,13 +313,22 @@ class Database {
 		if(preg_match("/password=([^;]*)/", DATABASE_DSN, $matches)) $db_pass=$matches[1];
 
 		$db_params = array(
-			PDO::ATTR_PERSISTENT => true,
+			PDO::ATTR_PERSISTENT => DATABASE_KA,
 			PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION
 		);
 		if(defined("HIPHOP")) $this->db = new PDO(DATABASE_DSN, $db_user, $db_pass);
 		else $this->db = new PDO(DATABASE_DSN, $db_user, $db_pass, $db_params);
 
-		$db_proto = $this->db->getAttribute(PDO::ATTR_DRIVER_NAME);
+		$this->connect_engine();
+		$this->engine->init($this->db);
+
+		$this->db->beginTransaction();
+	}
+
+	private function connect_engine() {
+		if(preg_match("/^([^:]*)/", DATABASE_DSN, $matches)) $db_proto=$matches[1];
+		else throw new SCoreException("Can't figure out database engine");
+
 		if($db_proto === "mysql") {
 			$this->engine = new MySQL();
 		}
@@ -308,21 +341,29 @@ class Database {
 		else {
 			die('Unknown PDO driver: '.$db_proto);
 		}
+	}
 
-		$matches = array();
-		if( defined("CACHE_DSN") && CACHE_DSN && preg_match("#(memcache|apc)://(.*)#", CACHE_DSN, $matches)) {
-			if($matches[1] == "memcache") {
-				$this->cache = new MemcacheCache($matches[2]);
-			}
-			else if($matches[1] == "apc") {
-				$this->cache = new APCCache($matches[2]);
-			}
-		}
-		else {
-			$this->cache = new NoCache();
-		}
+	public function commit() {
+		if(!is_null($this->db)) return $this->db->commit();
+	}
 
-		$this->engine->init($this->db);
+	public function rollback() {
+		if(!is_null($this->db)) return $this->db->rollback();
+	}
+
+	public function escape($input) {
+		if(is_null($this->db)) $this->connect_db();
+		return $this->db->Quote($input);
+	}
+
+	public function scoreql_to_sql($input) {
+		if(is_null($this->engine)) $this->connect_engine();
+		return $this->engine->scoreql_to_sql($input);
+	}
+
+	public function get_driver_name() {
+		if(is_null($this->engine)) $this->connect_engine();
+		return $this->engine->name;
 	}
 
 	/**
@@ -330,6 +371,7 @@ class Database {
 	 */
 	public function execute($query, $args=array()) {
 		try {
+			if(is_null($this->db)) $this->connect_db();
 			_count_execs($this->db, $query, $args);
 			$stmt = $this->db->prepare($query);
 			if (!array_key_exists(0, $args)) {
@@ -416,6 +458,7 @@ class Database {
 	 * Create a table from pseudo-SQL
 	 */
 	public function create_table($name, $data) {
+		if(is_null($this->engine)) $this->connect_engine();
 		$this->execute($this->engine->create_table_sql($name, $data));
 	}
 	

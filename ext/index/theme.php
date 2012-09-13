@@ -63,6 +63,11 @@ and of course start organising your images :-)
 		}
 	}
 
+	public function display_admin_block(/*array(string)*/ $parts) {
+		global $page;
+		$page->add_block(new Block("List Controls", join("<br>", $parts), "left", 50));
+	}
+
 
 	protected function build_navigation($page_number, $total_pages, $search_terms) {
 		$prev = $page_number - 1;
@@ -90,10 +95,11 @@ and of course start organising your images :-)
 	}
 
 	protected function build_table($images, $query) {
-		$table = "";
+		$table = "<div class='shm-image-list'>";
 		foreach($images as $image) {
 			$table .= $this->build_thumb_html($image, $query);
 		}
+		$table .= "</div>";
 		return $table;
 	}
 }

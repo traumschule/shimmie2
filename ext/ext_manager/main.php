@@ -98,6 +98,7 @@ class ExtManager extends Extension {
 				if($event->get_arg(0) == "set" && $user->check_auth_token()) {
 					if(is_writable("data/config")) {
 						$this->set_things($_POST);
+						log_warning("ext_manager", "Active extensions changed", true);
 						$page->set_mode("redirect");
 						$page->set_redirect(make_link("ext_manager"));
 					}
@@ -126,6 +127,17 @@ class ExtManager extends Extension {
 			}
 		}
 	}
+
+	public function onCommand(CommandEvent $event) {
+		if($event->cmd == "help") {
+			print "  disable-all-ext\n";
+			print "    disable all extensions\n\n";
+		}
+		if($event->cmd == "disable-all-ext") {
+			$this->write_config(array());
+		}
+	}
+
 
 	public function onUserBlockBuilding(UserBlockBuildingEvent $event) {
 		global $user;
@@ -166,12 +178,23 @@ class ExtManager extends Extension {
 			}
 		}
 
+		$this->write_config($extras);
+	}
+
+	private function write_config($extras) {
 		file_put_contents(
 			"data/config/extensions.conf.php",
 			'<'.'?php'."\n".
 			'define("EXTRA_EXTS", "'.implode(",", $extras).'");'."\n".
 			'?'.">"
 		);
+
+		// when the list of active extensions changes, we can be
+		// pretty sure that the list of who reacts to what will
+		// change too
+		if(file_exists("data/cache/event_listeners.php")) {
+			unlink("data/cache/event_listeners.php");
+		}
 	}
 }
 ?>

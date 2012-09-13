@@ -27,6 +27,18 @@ class BulkAdd extends Extension {
 		}
 	}
 
+	public function onCommand(CommandEvent $event) {
+		if($event->cmd == "help") {
+			print "  bulk-add [directory]\n";
+			print "    Import this directory\n\n";
+		}
+		if($event->cmd == "bulk-add") {
+			if(count($event->args) == 1) {
+				$this->add_dir($event->args[0]);
+			}
+		}
+	}
+
 	public function onAdminBuilding(AdminBuildingEvent $event) {
 		$this->theme->display_admin_block();
 	}
@@ -37,7 +49,6 @@ class BulkAdd extends Extension {
 	private function add_image($tmpname, $filename, $tags) {
 		assert(file_exists($tmpname));
 
-		global $user;
 		$pathinfo = pathinfo($filename);
 		if(!array_key_exists('extension', $pathinfo)) {
 			throw new UploadException("File has no extension");
@@ -46,7 +57,7 @@ class BulkAdd extends Extension {
 		$metadata['extension'] = $pathinfo['extension'];
 		$metadata['tags'] = $tags;
 		$metadata['source'] = null;
-		$event = new DataUploadEvent($user, $tmpname, $metadata);
+		$event = new DataUploadEvent($tmpname, $metadata);
 		send_event($event);
 		if($event->image_id == -1) {
 			throw new UploadException("File type not recognised");
@@ -75,10 +86,16 @@ class BulkAdd extends Extension {
 			}
 			else {
 				$pathinfo = pathinfo($fullpath);
-				$tags = $subdir;
-				$tags = str_replace("/", " ", $tags);
-				$tags = str_replace("__", " ", $tags);
-				$tags = trim($tags);
+				$matches = array();
+				if(preg_match("/\d+ - (.*)\.([a-zA-Z]+)/", $pathinfo["basename"], $matches)) {
+					$tags = $matches[1];
+				}
+				else {
+					$tags = $subdir;
+					$tags = str_replace("/", " ", $tags);
+					$tags = str_replace("__", " ", $tags);
+					$tags = trim($tags);
+				}
 				$list .= "<br>".html_escape("$shortpath (".str_replace(" ", ", ", $tags).")... ");
 				try{
 					$this->add_image($fullpath, $pathinfo["basename"], $tags);

@@ -27,10 +27,10 @@ class AddIPBanEvent extends Event {
 	var $reason;
 	var $end;
 
-	public function AddIPBanEvent($ip, $reason, $end) {
-		$this->ip = $ip;
-		$this->reason = $reason;
-		$this->end = $end;
+	public function AddIPBanEvent(/*string(ip)*/ $ip, /*string*/ $reason, /*string*/ $end) {
+		$this->ip = trim($ip);
+		$this->reason = trim($reason);
+		$this->end = trim($end);
 	}
 }
 // }}}
@@ -40,7 +40,7 @@ class IPBan extends Extension {
 
 	public function onInitExt(InitExtEvent $event) {
 		global $config;
-		if($config->get_int("ext_ipban_version") < 5) {
+		if($config->get_int("ext_ipban_version") < 8) {
 			$this->install();
 		}
 		$this->check_ip_ban();
@@ -56,6 +56,7 @@ class IPBan extends Extension {
 						else $end = $_POST['end'];
 						send_event(new AddIPBanEvent($_POST['ip'], $_POST['reason'], $end));
 
+						flash_message("Ban for {$_POST['ip']} added");
 						$page->set_mode("redirect");
 						$page->set_redirect(make_link("ip_ban/list"));
 					}
@@ -63,6 +64,8 @@ class IPBan extends Extension {
 				else if($event->get_arg(0) == "remove" && $user->check_auth_token()) {
 					if(isset($_POST['id'])) {
 						send_event(new RemoveIPBanEvent($_POST['id']));
+
+						flash_message("Ban removed");
 						$page->set_mode("redirect");
 						$page->set_redirect(make_link("ip_ban/list"));
 					}
@@ -86,14 +89,21 @@ class IPBan extends Extension {
 	}
 
 	public function onAddIPBan(AddIPBanEvent $event) {
-		global $user;
-		$this->add_ip_ban($event->ip, $event->reason, $event->end, $user);
+		global $user, $database;
+		$sql = "INSERT INTO bans (ip, reason, end_timestamp, banner_id) VALUES (:ip, :reason, :end, :admin_id)";
+		$database->Execute($sql, array("ip"=>$event->ip, "reason"=>$event->reason, "end"=>strtotime($event->end), "admin_id"=>$user->id));
+		$database->cache->delete("ip_bans_sorted");
+		log_info("ipban", "Banned {$event->ip} because '{$event->reason}' until {$event->end}");
 	}
 
 	public function onRemoveIPBan(RemoveIPBanEvent $event) {
 		global $database;
-		$database->Execute("DELETE FROM bans WHERE id = :id", array("id"=>$event->id));
-		$database->cache->delete("ip_bans_sorted");
+		$ban = $database->get_row("SELECT * FROM bans WHERE id = :id", array("id"=>$event->id));
+		if($ban) {
+			$database->Execute("DELETE FROM bans WHERE id = :id", array("id"=>$event->id));
+			$database->cache->delete("ip_bans_sorted");
+			log_info("ipban", "Removed {$ban['ip']}'s ban");
+		}
 	}
 
 // installer {{{
@@ -164,6 +174,12 @@ class IPBan extends Extension {
 			$database->Execute("ALTER TABLE bans ADD FOREIGN KEY (banner_id) REFERENCES users(id) ON DELETE CASCADE");
 			$config->set_int("ext_ipban_version", 7);
 		}
+
+		if($config->get_int("ext_ipban_version") == 7) {
+			$database->execute($database->scoreql_to_sql("ALTER TABLE bans CHANGE ip ip SCORE_INET"));
+			$database->execute($database->scoreql_to_sql("ALTER TABLE bans ADD COLUMN added SCORE_DATETIME NOT NULL DEFAULT SCORE_NOW"));
+			$config->set_int("ext_ipban_version", 8);
+		}
 	}
 // }}}
 // deal with banned person {{{
@@ -187,7 +203,7 @@ class IPBan extends Extension {
 	private function block(/*string*/ $remote) {
 		global $config, $database;
 
-		$prefix = ($database->engine->name == "sqlite" ? "bans." : "");
+		$prefix = ($database->get_driver_name() == "sqlite" ? "bans." : "");
 
 		$bans = $this->get_active_bans();
 
@@ -211,6 +227,8 @@ class IPBan extends Extension {
 				exit;
 			}
 		}
+		log_error("ipban", "block($remote) called but no bans matched");
+		exit;
 	}
 // }}}
 // database {{{
@@ -220,7 +238,7 @@ class IPBan extends Extension {
 			SELECT bans.*, users.name as banner_name
 			FROM bans
 			JOIN users ON banner_id = users.id
-			ORDER BY end_timestamp, bans.id
+			ORDER BY added, end_timestamp, bans.id
 		");
 		if($bans) {return $bans;}
 		else {return array();}
@@ -249,8 +267,8 @@ class IPBan extends Extension {
 		if($cached) return $cached;
 
 		$bans = $this->get_active_bans();
-		$ips = array("0.0.0.0" => false);
-		$nets = array("0.0.0.0/32" => false);
+		$ips = array(); # "0.0.0.0" => false);
+		$nets = array(); # "0.0.0.0/32" => false);
 		foreach($bans as $row) {
 			if(strstr($row['ip'], '/')) {
 				$nets[$row['ip']] = true;
@@ -263,14 +281,6 @@ class IPBan extends Extension {
 		$sorted = array($ips, $nets);
 		$database->cache->set("ip_bans_sorted", $sorted, 600);
 		return $sorted;
-	}
-
-	private function add_ip_ban($ip, $reason, $end, $user) {
-		global $database;
-		$sql = "INSERT INTO bans (ip, reason, end_timestamp, banner_id) VALUES (:ip, :reason, :end, :admin_id)";
-		$database->Execute($sql, array("ip"=>$ip, "reason"=>$reason, "end"=>strtotime($end), "admin_id"=>$user->id));
-		$database->cache->delete("ip_bans_sorted");
-		log_info("ipban", "'$user->name' has banned '$ip' because '$reason' until '$end'");
 	}
 // }}}
 }
