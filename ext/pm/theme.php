@@ -1,6 +1,54 @@
 <?php
 
 class PrivMsgTheme extends Themelet {
+	//
+	// Thread mode
+	//
+	public function display_threads(Page $page, $threads) {
+		global $user;
+
+		$html = "
+			<table id='pms' class='zebra sortable'>
+				<thead><tr>
+					<th style='width: 1px;'>Msgs</th>
+					<th>From</th>
+					<th style='width: 20em;'>Date</th>
+				</tr></thead>
+				<tbody>";
+		foreach($threads as $thread) {
+			$h_from = html_escape($thread->them->name);
+			$h_unread = html_escape($thread->unread_count);
+			$h_date = html_escape($thread->last_date);
+			$u_thread = make_link("pm/thread/".$thread->them->name);
+			$hb = $thread->them->can("hellbanned") ? "hb" : "";
+			$html .= "<tr class='$hb'>
+			<td>$h_unread</td>
+			<td><a href='$u_thread'>$h_from</a></td>
+			<td>$h_date</td>
+			</tr>";
+		}
+		$html .= "
+				</tbody>
+			</table>
+		";
+		$page->add_block(new Block("Threads", $html, "main", 40, "private-messages"));
+	}
+
+	public function display_thread(Page $page, User $me, User $them, /*PM[]*/ $pms) {
+		$this->display_composer($page, $me, $them, "Re: ".$pm->subject);
+		$h_them = html_escape($them->name);
+		$page->set_title("Messages with $h_them");
+		$page->set_heading("Messages with $h_them");
+		$page->add_block(new NavBlock());
+		foreach($pms as $pm) {
+			$h_name = html_escape(User::by_id($pm['from_id'])->name);
+			$page->add_block(new Block(null, "$h_name: " . format_text($pm['message']), "main", 10));
+		}
+	}
+
+	//
+	// Message mode
+	//
 	public function display_pms(Page $page, $pms) {
 		global $user;
 
@@ -27,7 +75,8 @@ class PrivMsgTheme extends Themelet {
 			$html .= "<tr class='$hb'>
 			<td>$readYN</td>
 			<td><a href='$pm_url'>$h_subject</a></td>
-			<td><a href='$from_url'>$h_from</a></td><td>$h_date</td>
+			<td><a href='$from_url'>$h_from</a></td>
+			<td>$h_date</td>
 			<td><form action='$del_url' method='POST'>
 				<input type='hidden' name='pm_id' value='{$pm->id}'>
 				".$user->get_auth_html()."
@@ -43,17 +92,23 @@ class PrivMsgTheme extends Themelet {
 	}
 
 	public function display_composer(Page $page, User $from, User $to, $subject="") {
-		global $user;
+		global $user, $config;
 		$post_url = make_link("pm/send");
 		$h_subject = html_escape($subject);
 		$to_id = $to->id;
 		$auth = $user->get_auth_html();
+		if($config->get_bool("pm_threaded")) {
+			$subject_row = "<input type='hidden' name='subject' value='shm_pm'>";
+		}
+		else {
+			$subject_row = "<tr><th>Subject:</th><td><input type='text' name='subject' value='$h_subject'></td></tr>";
+		}
 		$html = <<<EOD
 <form action="$post_url" method="POST">
 $auth
 <input type="hidden" name="to_id" value="$to_id">
 <table style="width: 400px;" class="form">
-<tr><th>Subject:</th><td><input type="text" name="subject" value="$h_subject"></td></tr>
+$subject_row
 <tr><td colspan="2"><textarea style="width: 100%" rows="6" name="message"></textarea></td></tr>
 <tr><td colspan="2"><input type="submit" value="Send"></td></tr>
 </table>

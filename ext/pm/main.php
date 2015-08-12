@@ -46,6 +46,16 @@ class PM {
 	}
 }
 
+class Thread {
+	var $them, $unread_count, $last_date;
+
+	public function __construct(User $them, /*int*/ $unread_count, $last_date) {
+		$this->them = $them;
+		$this->unread_count = $unread_count;
+		$this->last_date = $last_date;
+	}
+}
+
 class PrivMsg extends Extension {
 	public function onInitExt(InitExtEvent $event) {
 		global $config, $database;
@@ -91,11 +101,16 @@ class PrivMsg extends Extension {
 	}
 
 	public function onUserPageBuilding(UserPageBuildingEvent $event) {
-		global $page, $user;
+		global $page, $user, $config;
 		$duser = $event->display_user;
 		if(!$user->is_anonymous() && !$duser->is_anonymous()) {
 			if(($user->id == $duser->id) || $user->can("view_other_pms")) {
-				$this->theme->display_pms($page, $this->get_pms($duser));
+				if($config->get_bool("pm_threaded")) {
+					$this->theme->display_threads($page, $this->get_threads($duser));
+				}
+				else {
+					$this->theme->display_pms($page, $this->get_pms($duser));
+				}
 			}
 			if($user->id != $duser->id) {
 				$this->theme->display_composer($page, $user, $duser);
@@ -108,6 +123,15 @@ class PrivMsg extends Extension {
 		if($event->page_matches("pm")) {
 			if(!$user->is_anonymous()) {
 				switch($event->get_arg(0)) {
+					case "thread":
+						$them = User::by_name($event->get_arg(1));
+						$pms = $database->get_all("
+							SELECT *
+							FROM private_message
+							WHERE (from_id = :me AND to_id = :them) OR (from_id = :them AND to_id = :me)
+						", array("me" => $user->id, "them" => $them->id));
+						$this->theme->display_thread($page, $user, $them, $pms);
+						break;
 					case "read":
 						$pm_id = int_escape($event->get_arg(1));
 						$pm = $database->get_row("SELECT * FROM private_message WHERE id = :id", array("id" => $pm_id));
@@ -176,6 +200,23 @@ class PrivMsg extends Extension {
 		log_info("pm", "Sent PM to User #{$event->pm->to_id}");
 	}
 
+	
+	private function get_threads(User $user) {
+		global $database;
+
+		$arr = $database->get_all("
+			SELECT from_id, max(sent_date) AS last_date, count(id) AS unread
+			FROM private_message
+			WHERE to_id = :me
+			GROUP BY from_id
+			ORDER BY sent_date DESC
+		", array("me" => $user->id));
+		$pms = array();
+		foreach($arr as $t) {
+			$threads[] = new Thread(User::by_id($t['from_id']), $t['unread'], $t['last_date']);
+		}
+		return $threads;
+	}
 
 	private function get_pms(User $user) {
 		global $database;
