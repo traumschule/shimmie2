@@ -10,9 +10,9 @@ class PrivMsgTheme extends Themelet {
 		$html = "
 			<table id='pms' class='zebra sortable'>
 				<thead><tr>
-					<th style='width: 1px;'>Msgs</th>
-					<th>From</th>
-					<th style='width: 20em;'>Date</th>
+					<th style='width: 1px; text-align: right;'>Msgs</th>
+					<th style='text-align: left;'>From</th>
+					<th style='text-align: right;'>Date</th>
 				</tr></thead>
 				<tbody>";
 		foreach($threads as $thread) {
@@ -22,9 +22,9 @@ class PrivMsgTheme extends Themelet {
 			$u_thread = make_link("pm/thread/".$thread->them->name);
 			$hb = $thread->them->can("hellbanned") ? "hb" : "";
 			$html .= "<tr class='$hb'>
-			<td>$h_unread</td>
-			<td><a href='$u_thread'>$h_from</a></td>
-			<td>$h_date</td>
+			<td style='text-align: right;'>$h_unread</td>
+			<td style='text-align: left;'><a href='$u_thread'>$h_from</a></td>
+			<td style='text-align: right;'>$h_date</td>
 			</tr>";
 		}
 		$html .= "
@@ -62,7 +62,7 @@ class PrivMsgTheme extends Themelet {
 				</div>
 			";
 		}
-		$page->add_block(new Block(null, $html, "main", 10));
+		$page->add_block(new Block(null, $html, "main", 10, "comment-list-user"));
 	}
 
 	//

@@ -60,6 +60,8 @@ class PrivMsg extends Extension {
 	public function onInitExt(InitExtEvent $event) {
 		global $config, $database;
 
+		$config->set_bool("pm_threaded", false);
+
 		// shortcut to latest
 		if($config->get_int("pm_version") < 1) {
 			$database->create_table("private_message", "
@@ -173,7 +175,9 @@ class PrivMsg extends Extension {
 							$subject = $_POST["subject"];
 							$message = $_POST["message"];
 							send_event(new SendPMEvent(new PM($from_id, $_SERVER["REMOTE_ADDR"], $to_id, $subject, $message)));
-							flash_message("PM sent");
+							if(!$config->get_bool("pm_threaded")) {
+								flash_message("PM sent");
+							}
 							$page->set_mode("redirect");
 							$page->set_redirect($_SERVER["HTTP_REFERER"]);
 						}
