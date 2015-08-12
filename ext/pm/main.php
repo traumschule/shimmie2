@@ -60,7 +60,7 @@ class PrivMsg extends Extension {
 	public function onInitExt(InitExtEvent $event) {
 		global $config, $database;
 
-		$config->set_bool("pm_threaded", false);
+		$config->set_default_bool("pm_threaded", false);
 
 		// shortcut to latest
 		if($config->get_int("pm_version") < 1) {
