@@ -10,19 +10,23 @@ class PrivMsgTheme extends Themelet {
 		$html = "
 			<table id='pms' class='zebra sortable'>
 				<thead><tr>
-					<th style='width: 1px; text-align: right;'>Msgs</th>
 					<th style='text-align: left;'>From</th>
-					<th style='text-align: right;'>Date</th>
+					<th style='text-align: right;'>Last Message</th>
 				</tr></thead>
 				<tbody>";
+		$unread = null;
 		foreach($threads as $thread) {
+			if($thread->unread != $unread) {
+				if(!is_null($unread)) {
+					$html .= "<tr><td colspan='2'>Read</td></tr>";
+				}
+				$unread = $thread->unread;
+			}
 			$h_from = html_escape($thread->them->name);
-			$h_unread = html_escape($thread->unread_count);
-			$h_date = html_escape($thread->last_date);
+			$h_date = autodate($thread->last_date);
 			$u_thread = make_link("pm/thread/".$thread->them->name);
 			$hb = $thread->them->can("hellbanned") ? "hb" : "";
 			$html .= "<tr class='$hb'>
-			<td style='text-align: right;'>$h_unread</td>
 			<td style='text-align: left;'><a href='$u_thread'>$h_from</a></td>
 			<td style='text-align: right;'>$h_date</td>
 			</tr>";
@@ -43,15 +47,16 @@ class PrivMsgTheme extends Themelet {
 
 		$html = "";
 		foreach($pms as $pm) {
-			$h_name = html_escape(User::by_id($pm['from_id'])->name);
+			$from_user = User::by_id($pm['from_id']);
+			$h_name = html_escape($from_user->name);
 			$h_userlink = '<a class="username" href="'.make_link('user/'.$h_name).'">'.$h_name.'</a>';
 			$h_avatar = "";
-			if(!empty($comment->owner_email)) {
-				$hash = md5(strtolower($comment->owner_email));
+			if(!empty($from_user->email)) {
+				$hash = md5(strtolower($from_user->email));
 				$cb = date("Y-m-d");
 				$h_avatar = "<img src=\"http://www.gravatar.com/avatar/$hash.jpg?cacheBreak=$cb\"><br>";
 			}
-			$h_timestamp = autodate($pm['date_sent']);
+			$h_timestamp = autodate($pm['sent_date']);
 			$html .= "
 				<div class='comment'>
 					<div class=\"info\">

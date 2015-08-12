@@ -47,11 +47,11 @@ class PM {
 }
 
 class Thread {
-	var $them, $unread_count, $last_date;
+	var $them, $unread, $last_date;
 
-	public function __construct(User $them, /*int*/ $unread_count, $last_date) {
+	public function __construct(User $them, /*bool*/ $unread, $last_date) {
 		$this->them = $them;
-		$this->unread_count = $unread_count;
+		$this->unread = $unread;
 		$this->last_date = $last_date;
 	}
 }
@@ -127,11 +127,14 @@ class PrivMsg extends Extension {
 				switch($event->get_arg(0)) {
 					case "thread":
 						$them = User::by_name($event->get_arg(1));
+						$us = array("me" => $user->id, "them" => $them->id);
 						$pms = $database->get_all("
 							SELECT *
 							FROM private_message
 							WHERE (from_id = :me AND to_id = :them) OR (from_id = :them AND to_id = :me)
-						", array("me" => $user->id, "them" => $them->id));
+						", $us);
+						$database->execute("UPDATE private_message SET is_read='Y' WHERE from_id = :them AND to_id = :me", $us);
+						$database->cache->delete("pm-count-{$user->id}");
 						$this->theme->display_thread($page, $user, $them, $pms);
 						break;
 					case "read":
@@ -209,15 +212,15 @@ class PrivMsg extends Extension {
 		global $database;
 
 		$arr = $database->get_all("
-			SELECT from_id, max(sent_date) AS last_date, count(id) AS unread
+			SELECT from_id, is_read, max(sent_date) AS last_date
 			FROM private_message
 			WHERE to_id = :me
-			GROUP BY from_id
-			ORDER BY sent_date DESC
+			GROUP BY is_read, from_id
+			ORDER BY is_read, last_date DESC
 		", array("me" => $user->id));
 		$pms = array();
 		foreach($arr as $t) {
-			$threads[] = new Thread(User::by_id($t['from_id']), $t['unread'], $t['last_date']);
+			$threads[] = new Thread(User::by_id($t['from_id']), $t['is_read'], $t['last_date']);
 		}
 		return $threads;
 	}
