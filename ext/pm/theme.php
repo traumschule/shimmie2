@@ -39,7 +39,7 @@ class PrivMsgTheme extends Themelet {
 	}
 
 	public function display_thread(Page $page, User $me, User $them, /*PM[]*/ $pms) {
-		$this->display_composer($page, $me, $them, "Re: ".$pm->subject);
+		$this->display_composer($page, $me, $them);
 		$h_them = html_escape($them->name);
 		$page->set_title("Messages with $h_them");
 		$page->set_heading("Messages with $h_them");

@@ -121,7 +121,7 @@ class PrivMsg extends Extension {
 	}
 
 	public function onPageRequest(PageRequestEvent $event) {
-		global $database, $page, $user;
+		global $database, $page, $user, $config;
 		if($event->page_matches("pm")) {
 			if(!$user->is_anonymous()) {
 				switch($event->get_arg(0)) {
