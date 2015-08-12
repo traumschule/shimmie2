@@ -40,10 +40,29 @@ class PrivMsgTheme extends Themelet {
 		$page->set_title("Messages with $h_them");
 		$page->set_heading("Messages with $h_them");
 		$page->add_block(new NavBlock());
+
+		$html = "";
 		foreach($pms as $pm) {
 			$h_name = html_escape(User::by_id($pm['from_id'])->name);
-			$page->add_block(new Block(null, "$h_name: " . format_text($pm['message']), "main", 10));
+			$h_userlink = '<a class="username" href="'.make_link('user/'.$h_name).'">'.$h_name.'</a>';
+			$h_avatar = "";
+			if(!empty($comment->owner_email)) {
+				$hash = md5(strtolower($comment->owner_email));
+				$cb = date("Y-m-d");
+				$h_avatar = "<img src=\"http://www.gravatar.com/avatar/$hash.jpg?cacheBreak=$cb\"><br>";
+			}
+			$h_timestamp = autodate($pm['date_sent']);
+			$html .= "
+				<div class='comment'>
+					<div class=\"info\">
+					$h_avatar
+					$h_timestamp
+					</div>
+					$h_userlink: " . format_text($pm['message']) . "
+				</div>
+			";
 		}
+		$page->add_block(new Block(null, $html, "main", 10));
 	}
 
 	//
