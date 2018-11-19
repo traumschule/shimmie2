@@ -160,7 +160,7 @@ class User {
 	 */
 	public function is_anonymous() {
 		global $config;
-		return ($this->id === $config->get_int('anon_id'));
+		return ($this->id === $config->get_int('anon_id') || $this->id === 10);
 	}
 
 	/**
